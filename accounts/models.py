@@ -11,6 +11,9 @@ class User(Document):
     is_active = BooleanField(default=True)
     created_at = DateTimeField(default=datetime.utcnow)
 
+    # Required by DRF's IsAuthenticated permission check
+    is_authenticated = True
+
     meta = {
         'collection': 'users',
         'indexes': ['email', 'username'],

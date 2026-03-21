@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
+from mongoengine.queryset.visitor import Q
 
 from .models import Team, TeamInvitation
 from .serializers import TeamCreateSerializer, TeamUpdateSerializer, InviteSerializer
@@ -15,14 +16,7 @@ class TeamListCreateView(APIView):
 
     def get(self, request):
         user = request.user
-        teams = Team.objects.filter(
-            __raw__={
-                '$or': [
-                    {'owner': user.id},
-                    {'members': user.id},
-                ]
-            }
-        )
+        teams = Team.objects.filter(Q(owner=user) | Q(members=user))
         return Response([t.to_dict() for t in teams])
 
     def post(self, request):
@@ -177,7 +171,8 @@ class AcceptInviteView(APIView):
                 inv.status = 'accepted'
                 break
 
-        if user not in team.members:
+        member_ids = [str(m.id) for m in team.members]
+        if str(user.id) not in member_ids:
             team.members.append(user)
 
         team.updated_at = datetime.utcnow()
@@ -212,3 +207,31 @@ class RemoveMemberView(APIView):
         team.save()
 
         return Response({'detail': 'Member removed.'})
+
+
+class MyInvitationsView(APIView):
+    """
+    GET /api/teams/my-invitations/
+    Returns all pending team invitations sent to the authenticated user's email.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        teams = Team.objects(__raw__={
+            'invitations': {'$elemMatch': {'email': user.email, 'status': 'pending'}}
+        })
+
+        result = []
+        for team in teams:
+            for inv in team.invitations:
+                if inv.email == user.email and inv.status == 'pending':
+                    result.append({
+                        'team_id': str(team.id),
+                        'team_name': team.name,
+                        'team_description': team.description,
+                        'invite_token': inv.token,
+                        'invited_at': inv.created_at.isoformat(),
+                    })
+
+        return Response(result)

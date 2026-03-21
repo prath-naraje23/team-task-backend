@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from mongoengine.queryset.visitor import Q
 
 from .models import Activity
 from teams.models import Team
@@ -17,11 +18,8 @@ class ActivityListView(APIView):
         task_id = request.query_params.get('task') or request.query_params.get('task_id')
         limit = int(request.query_params.get('limit', 50))
 
-        user_teams = Team.objects.filter(
-            __raw__={'$or': [{'owner': user.id}, {'members': user.id}]}
-        ).values_list('id')
-
-        filters = {'team__in': list(user_teams)}
+        user_teams = list(Team.objects.filter(Q(owner=user) | Q(members=user)).scalar('id'))
+        filters = {'team__in': user_teams}
 
         if team_id:
             filters['team'] = team_id

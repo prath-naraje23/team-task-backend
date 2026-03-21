@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
+from mongoengine.queryset.visitor import Q
 
 from .models import Task, Comment
 from .serializers import TaskCreateSerializer, TaskUpdateSerializer, TaskStatusSerializer, CommentSerializer
@@ -34,11 +35,8 @@ class TaskListCreateView(APIView):
         priority = request.query_params.get('priority')
         assigned_to_me = request.query_params.get('assigned_to_me')
 
-        user_teams = Team.objects.filter(
-            __raw__={'$or': [{'owner': user.id}, {'members': user.id}]}
-        ).values_list('id')
-
-        filters = {'team__in': list(user_teams)}
+        user_teams = list(Team.objects.filter(Q(owner=user) | Q(members=user)).scalar('id'))
+        filters = {'team__in': user_teams}
 
         if team_id:
             filters['team'] = team_id
